@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deteksi Tangan Mengepal ML</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
+
+    <style>
+        /* 4. Konfigurasi font default */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c;
+        }
+        h1, h2 {
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        /* 5. STYLING LAMA (LCD-DISPLAY) DIHAPUS */
+        /* Styling untuk #lcd-display sudah tidak diperlukan lagi */
+
+        /* Styling untuk scrollbar (opsional) */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #2d3748; }
+        ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #718096; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <h1 class="text-4xl md:text-5xl font-extrabold text-green-400 mb-8 tracking-tight text-center">
+        Machine Learning Part 2<br class="md:hidden"> by Fahrul Hamzidan Pulungan
+    </h1>
+
+    <div class="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-2xl bg-gray-800 border-2 border-green-500">
+        
+        <video id="webcam" class="absolute top-0 left-0 w-full h-full object-cover transform -scale-x-1" playsinline></video>
+        
+        <div id="display-layer" class="absolute top-0 left-0 w-full h-full z-10 pointer-events-none">
+            <img id="image-overlay" 
+                 src="dafcc0dabb25e88540586e71209e6763.jpg" 
+                 alt="Layer Foto" 
+                 class="absolute top-5 left-1/2 -translate-x-1/2 w-80 h-auto z-20 hidden rounded-lg shadow-lg"
+            >
+        </div>
+
+        <div id="loading-message" class="absolute inset-0 flex items-center justify-center z-30 bg-gray-900 bg-opacity-80 backdrop-blur-sm">
+            <div class="text-center p-6 rounded-lg bg-gray-700 shadow-xl">
+                <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-400 mx-auto"></div>
+                <p class="text-xl font-semibold mt-6 text-gray-50">Memuat Model ML & Menyalakan Webcam...</p>
+                <p class="text-sm text-gray-300 mt-2">Harap izinkan akses kamera di browser Anda.</p>
+            </div>
+        </div>
+    </div>
+
+    <audio id="sound-effect" src="SnapTik.Net_7507124144270478648.mp3" preload="auto"></audio>
+
+    <script type="module">
+        const videoElement = document.getElementById('webcam');
+        const loadingMessage = document.getElementById('loading-message');
+
+        // --- PERUBAHAN: Mendefinisikan elemen baru ---
+        const imageOverlay = document.getElementById('image-overlay');
+        const soundEffect = document.getElementById('sound-effect');
+        
+        // Variabel status untuk mencegah suara diputar berulang-ulang
+        let isFistDetected = false;
+
+        // --- 1. Logika untuk Menghitung Jari ---
+        // (Tidak ada perubahan di bagian ini)
+        
+        const FINGER_TIP_INDICES = { THUMB: 4, INDEX: 8, MIDDLE: 12, RING: 16, PINKY: 20 };
+        const FINGER_PIP_INDICES = { THUMB: 3, INDEX: 6, MIDDLE: 10, RING: 14, PINKY: 18 };
+
+        function countFingers(landmarks) {
+            let count = 0;
+            if (!landmarks) return 0;
+            
+            // Logika Jempol (tangan kanan di cermin)
+            if (landmarks[FINGER_TIP_INDICES.THUMB].x < landmarks[FINGER_PIP_INDICES.THUMB].x) {
+                count++;
+            }
+            // 4 Jari lainnya
+            if (landmarks[FINGER_TIP_INDICES.INDEX].y < landmarks[FINGER_PIP_INDICES.INDEX].y) {
+                count++;
+            }
+            if (landmarks[FINGER_TIP_INDICES.MIDDLE].y < landmarks[FINGER_PIP_INDICES.MIDDLE].y) {
+                count++;
+            }
+            if (landmarks[FINGER_TIP_INDICES.RING].y < landmarks[FINGER_PIP_INDICES.RING].y) {
+                count++;
+            }
+            if (landmarks[FINGER_TIP_INDICES.PINKY].y < landmarks[FINGER_PIP_INDICES.PINKY].y) {
+                count++;
+            }
+            return Math.min(count, 5);
+        }
+
+        // --- 2. Logika Hujan Angka (DIHAPUS) ---
+        // (Tidak ada)
+
+        // --- 3. Inisialisasi MediaPipe Hands ---
+
+        // --- PERUBAHAN BESAR PADA FUNGSI onResults ---
+        function onResults(results) {
+            if (loadingMessage) {
+                loadingMessage.style.display = 'none'; // Sembunyikan pesan loading
+            }
+
+            // Variabel untuk menampung status kepal di frame ini
+            let currentFistState = false; 
+            
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                // Tangan terdeteksi, kita proses
+                const landmarks = results.multiHandLandmarks[0];
+                const detectedNumber = countFingers(landmarks);
+                
+                if (detectedNumber === 0) {
+                    // Jika tangan terdeteksi DAN 0 jari terangkat = KEPAL
+                    currentFistState = true;
+                }
+                // Jika detectedNumber > 0, currentFistState tetap 'false'
+                
+            } else {
+                // Tidak ada tangan terdeteksi
+                currentFistState = false; 
+            }
+
+            // --- Logika untuk memicu gambar dan suara ---
+            // Cek perubahan status untuk menghindari pemicu berulang
+            
+            if (currentFistState && !isFistDetected) {
+                // Transisi: Dari BUKAN kepal -> MENJADI kepal
+                console.log("Status: Tangan Mengepal Terdeteksi!");
+                isFistDetected = true;
+                
+                // Tampilkan gambar
+                imageOverlay.classList.remove('hidden');
+                
+                // Putar suara (mulai dari awal)
+                soundEffect.currentTime = 0; 
+                soundEffect.play();
+
+            } else if (!currentFistState && isFistDetected) {
+                // Transisi: Dari kepal -> MENJADI BUKAN kepal (atau tangan hilang)
+                console.log("Status: Tangan Dilepas.");
+                isFistDetected = false;
+                
+                // Sembunyikan gambar
+                imageOverlay.classList.add('hidden');
+                
+                // Hentikan suara
+                soundEffect.pause(); 
+            }
+        }
+
+        const hands = new window.Hands({
+            locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`;
+            }
+        });
+
+        hands.setOptions({
+            maxNumHands: 1,
+            modelComplexity: 1,
+            minDetectionConfidence: 0.7, // Naikkan confidence untuk deteksi lebih stabil
+            minTrackingConfidence: 0.7
+        });
+
+        hands.onResults(onResults);
+
+        // --- 4. Inisialisasi Webcam ---
+        // (Tidak ada perubahan di bagian ini)
+        
+        const camera = new window.Camera(videoElement, {
+            onFrame: async () => {
+                await hands.send({ image: videoElement });
+            },
+            width: 1280,
+            height: 720
+        });
+        
+        camera.start();
+
+    </script>
+</body>
+</html>
