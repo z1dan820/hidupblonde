@@ -3,32 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Deteksi Tangan Mengepal ML</title>
+    <title>Deteksi Tangan & Kontrol Tema</title>
     <script src="https://cdn.tailwindcss.com"></script>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
     
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js" crossorigin="anonymous"></script>
 
     <style>
-        /* 4. Konfigurasi font default */
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #1a202c;
+            /* Transisi untuk pergantian tema */
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
         h1, h2 {
             font-family: 'Poppins', sans-serif;
+            transition: color 0.3s ease;
         }
         
-        /* 5. STYLING LAMA (LCD-DISPLAY) DIHAPUS */
-        /* Styling untuk #lcd-display sudah tidak diperlukan lagi */
-
         /* Styling untuk scrollbar (opsional) */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #2d3748; }
         ::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #718096; }
+
+        /* --- TAMBAHAN: Styling untuk Tema Warm --- */
+        body.theme-warm {
+            background-color: #f7f3e8; /* Latar belakang warm */
+            color: #3d2c2c; /* Teks warm */
+        }
+        body.theme-warm h1 {
+            color: #d97706; /* Judul warm (Amber-700) */
+        }
+        body.theme-warm .video-container {
+            background-color: #eaddc7; /* Kontainer video warm */
+            border-color: #d97706; /* Border warm */
+        }
+        body.theme-warm .loading-overlay {
+            background-color: rgba(247, 243, 232, 0.8); /* Loading overlay warm */
+        }
+        body.theme-warm .loading-box {
+            background-color: #eaddc7; /* Box loading warm */
+            color: #3d2c2c; /* Teks loading warm */
+        }
+        body.theme-warm .loading-spinner {
+            border-color: #d97706;
+            border-top-color: transparent;
+            border-bottom-color: #d97706;
+        }
+        body.theme-warm #theme-toggle-button {
+            background-color: #eaddc7;
+            border-color: #d97706;
+            color: #3d2c2c;
+        }
+        body.theme-warm ::-webkit-scrollbar-track { background: #eaddc7; }
+        body.theme-warm ::-webkit-scrollbar-thumb { background: #c08a5f; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
@@ -37,21 +68,27 @@
         Machine Learning Part 2<br class="md:hidden"> by Fahrul Hamzidan Pulungan
     </h1>
 
-    <div class="relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-2xl bg-gray-800 border-2 border-green-500">
+    <div class="video-container relative w-full max-w-4xl aspect-video rounded-xl overflow-hidden shadow-2xl bg-gray-800 border-2 border-green-500">
         
         <video id="webcam" class="absolute top-0 left-0 w-full h-full object-cover transform -scale-x-1" playsinline></video>
         
+        <canvas id="output-canvas" class="absolute top-0 left-0 w-full h-full object-cover transform -scale-x-1 z-5"></canvas>
+        
         <div id="display-layer" class="absolute top-0 left-0 w-full h-full z-10 pointer-events-none">
-            <img id="image-overlay" 
-                 src="dafcc0dabb25e88540586e71209e6763.jpg" 
-                 alt="Layer Foto" 
+            <img id="image-overlay"    
+                 src="dafcc0dabb25e88540586e71209e6763.jpg"    
+                 alt="Layer Foto"    
                  class="absolute top-5 left-1/2 -translate-x-1/2 w-80 h-auto z-20 hidden rounded-lg shadow-lg"
             >
+
+            <div id="theme-toggle-button" class="absolute top-5 right-5 w-20 h-20 bg-gray-700 rounded-full border-4 border-gray-500 shadow-lg transition-all duration-300 pointer-events-none">
+                <span id="theme-icon" class="absolute inset-0 flex items-center justify-center text-3xl">☀️</span>
+            </div>
         </div>
 
-        <div id="loading-message" class="absolute inset-0 flex items-center justify-center z-30 bg-gray-900 bg-opacity-80 backdrop-blur-sm">
-            <div class="text-center p-6 rounded-lg bg-gray-700 shadow-xl">
-                <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-400 mx-auto"></div>
+        <div id="loading-message" class="loading-overlay absolute inset-0 flex items-center justify-center z-30 bg-gray-900 bg-opacity-80 backdrop-blur-sm">
+            <div class="loading-box text-center p-6 rounded-lg bg-gray-700 shadow-xl">
+                <div class="loading-spinner animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-green-400 mx-auto"></div>
                 <p class="text-xl font-semibold mt-6 text-gray-50">Memuat Model ML & Menyalakan Webcam...</p>
                 <p class="text-sm text-gray-300 mt-2">Harap izinkan akses kamera di browser Anda.</p>
             </div>
@@ -63,17 +100,24 @@
     <script type="module">
         const videoElement = document.getElementById('webcam');
         const loadingMessage = document.getElementById('loading-message');
-
-        // --- PERUBAHAN: Mendefinisikan elemen baru ---
         const imageOverlay = document.getElementById('image-overlay');
         const soundEffect = document.getElementById('sound-effect');
-        
-        // Variabel status untuk mencegah suara diputar berulang-ulang
+
+        // --- TAMBAHAN: Elemen untuk marking & tombol ---
+        const canvasElement = document.getElementById('output-canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const themeToggleButton = document.getElementById('theme-toggle-button');
+        const themeIcon = document.getElementById('theme-icon');
+        const bodyElement = document.body;
+
+        // --- TAMBAHAN: Variabel status untuk tombol tema ---
+        let isWarmTheme = false;
+        let lastToggleTime = 0;
+        const toggleCooldown = 1000; // 1 detik cooldown agar tidak kedip-kedip
+
+        // Variabel status untuk deteksi kepal
         let isFistDetected = false;
 
-        // --- 1. Logika untuk Menghitung Jari ---
-        // (Tidak ada perubahan di bagian ini)
-        
         const FINGER_TIP_INDICES = { THUMB: 4, INDEX: 8, MIDDLE: 12, RING: 16, PINKY: 20 };
         const FINGER_PIP_INDICES = { THUMB: 3, INDEX: 6, MIDDLE: 10, RING: 14, PINKY: 18 };
 
@@ -101,10 +145,6 @@
             return Math.min(count, 5);
         }
 
-        // --- 2. Logika Hujan Angka (DIHAPUS) ---
-        // (Tidak ada)
-
-        // --- 3. Inisialisasi MediaPipe Hands ---
 
         // --- PERUBAHAN BESAR PADA FUNGSI onResults ---
         function onResults(results) {
@@ -112,51 +152,93 @@
                 loadingMessage.style.display = 'none'; // Sembunyikan pesan loading
             }
 
+            // --- TAMBAHAN: Setup dan bersihkan canvas ---
+            // Set ukuran canvas sesuai dengan ukuran internal video
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
             // Variabel untuk menampung status kepal di frame ini
-            let currentFistState = false; 
+            let currentFistState = false;    
             
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                // Tangan terdeteksi, kita proses
-                const landmarks = results.multiHandLandmarks[0];
-                const detectedNumber = countFingers(landmarks);
+                // --- TAMBAHAN: Menggambar landmarks (Marking) ---
+                // 
+                for (const landmarks of results.multiHandLandmarks) {
+                    // Menggambar garis penghubung antar sendi
+                    window.drawConnectors(canvasCtx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+                    // Menggambar titik-titik sendi (landmarks)
+                    window.drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', radius: 4, lineWidth: 2});
+                }
                 
+                // Ambil landmarks tangan pertama
+                const landmarks = results.multiHandLandmarks[0];
+
+                // --- 1. Logika Deteksi Jari Mengepal (Kode Asli) ---
+                const detectedNumber = countFingers(landmarks);
                 if (detectedNumber === 0) {
-                    // Jika tangan terdeteksi DAN 0 jari terangkat = KEPAL
                     currentFistState = true;
                 }
-                // Jika detectedNumber > 0, currentFistState tetap 'false'
                 
+                // --- 2. TAMBAHAN: Logika Tombol Tema ---
+                const indexTip = landmarks[FINGER_TIP_INDICES.INDEX]; // Ujung Jari Telunjuk (landmark #8)
+                if (indexTip) {
+                    // Dapatkan posisi tombol di layar
+                    const buttonRect = themeToggleButton.getBoundingClientRect();
+                    // Dapatkan posisi video di layar
+                    const videoRect = videoElement.getBoundingClientRect();
+                    
+                    // Konversi koordinat landmark (0.0 - 1.0) ke koordinat layar (pixel)
+                    // Penting: Video di-mirror (-scale-x-1), jadi koordinat x harus dibalik (1 - indexTip.x)
+                    const landmarkScreenX = videoRect.left + (1 - indexTip.x) * videoRect.width;
+                    const landmarkScreenY = videoRect.top + indexTip.y * videoRect.height;
+
+                    // Cek apakah landmark ada di dalam area tombol
+                    const isTouching = (
+                        landmarkScreenX > buttonRect.left &&
+                        landmarkScreenX < buttonRect.right &&
+                        landmarkScreenY > buttonRect.top &&
+                        landmarkScreenY < buttonRect.bottom
+                    );
+
+                    const now = Date.now();
+                    // Jika menyentuh DAN sudah melewati masa cooldown
+                    if (isTouching && (now - lastToggleTime > toggleCooldown)) {
+                        lastToggleTime = now; // Reset cooldown
+                        
+                        // Ganti status tema
+                        isWarmTheme = !isWarmTheme;
+                        bodyElement.classList.toggle('theme-warm', isWarmTheme);
+                        
+                        // Ganti ikon tombol
+                        themeIcon.innerText = isWarmTheme ? '🌙' : '☀️';
+                        console.log("Tema diubah ke:", isWarmTheme ? "Warm" : "Dark");
+                    }
+                }
+
             } else {
                 // Tidak ada tangan terdeteksi
-                currentFistState = false; 
+                currentFistState = false;    
             }
 
-            // --- Logika untuk memicu gambar dan suara ---
-            // Cek perubahan status untuk menghindari pemicu berulang
-            
+            // --- Logika untuk memicu gambar dan suara (Kode Asli) ---
             if (currentFistState && !isFistDetected) {
-                // Transisi: Dari BUKAN kepal -> MENJADI kepal
                 console.log("Status: Tangan Mengepal Terdeteksi!");
                 isFistDetected = true;
-                
-                // Tampilkan gambar
                 imageOverlay.classList.remove('hidden');
-                
-                // Putar suara (mulai dari awal)
-                soundEffect.currentTime = 0; 
+                soundEffect.currentTime = 0;    
                 soundEffect.play();
-
             } else if (!currentFistState && isFistDetected) {
-                // Transisi: Dari kepal -> MENJADI BUKAN kepal (atau tangan hilang)
                 console.log("Status: Tangan Dilepas.");
                 isFistDetected = false;
-                
-                // Sembunyikan gambar
                 imageOverlay.classList.add('hidden');
-                
-                // Hentikan suara
-                soundEffect.pause(); 
+                soundEffect.pause();    
             }
+
+            // --- TAMBAHAN: Restore canvas setelah selesai ---
+            canvasCtx.restore();
         }
 
         const hands = new window.Hands({
@@ -168,15 +250,12 @@
         hands.setOptions({
             maxNumHands: 1,
             modelComplexity: 1,
-            minDetectionConfidence: 0.7, // Naikkan confidence untuk deteksi lebih stabil
+            minDetectionConfidence: 0.7,
             minTrackingConfidence: 0.7
         });
 
         hands.onResults(onResults);
 
-        // --- 4. Inisialisasi Webcam ---
-        // (Tidak ada perubahan di bagian ini)
-        
         const camera = new window.Camera(videoElement, {
             onFrame: async () => {
                 await hands.send({ image: videoElement });
