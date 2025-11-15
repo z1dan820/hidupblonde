@@ -97,175 +97,177 @@
 
     <audio id="sound-effect" src="SnapTik.Net_7507124144270478648.mp3" preload="auto"></audio>
 
-    <script type="module">
-        const videoElement = document.getElementById('webcam');
-        const loadingMessage = document.getElementById('loading-message');
-        const imageOverlay = document.getElementById('image-overlay');
-        const soundEffect = document.getElementById('sound-effect');
+<script type="module">
+    const videoElement = document.getElementById('webcam');
+    const loadingMessage = document.getElementById('loading-message');
+    const imageOverlay = document.getElementById('image-overlay');
+    const soundEffect = document.getElementById('sound-effect');
 
-        // --- TAMBAHAN: Elemen untuk marking & tombol ---
-        const canvasElement = document.getElementById('output-canvas');
-        const canvasCtx = canvasElement.getContext('2d');
-        const themeToggleButton = document.getElementById('theme-toggle-button');
-        const themeIcon = document.getElementById('theme-icon');
-        const bodyElement = document.body;
+    // Elemen untuk marking & tombol
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const themeToggleButton = document.getElementById('theme-toggle-button');
+    const themeIcon = document.getElementById('theme-icon');
+    const bodyElement = document.body;
 
-        // --- TAMBAHAN: Variabel status untuk tombol tema ---
-        let isWarmTheme = false;
-        let lastToggleTime = 0;
-        const toggleCooldown = 1000; // 1 detik cooldown agar tidak kedip-kedip
+    // Variabel status untuk tombol tema
+    let isWarmTheme = false;
+    let lastToggleTime = 0;
+    const toggleCooldown = 1000; // 1 detik cooldown
 
-        // Variabel status untuk deteksi kepal
-        let isFistDetected = false;
+    // Variabel status untuk deteksi kepal
+    let isFistDetected = false;
 
-        const FINGER_TIP_INDICES = { THUMB: 4, INDEX: 8, MIDDLE: 12, RING: 16, PINKY: 20 };
-        const FINGER_PIP_INDICES = { THUMB: 3, INDEX: 6, MIDDLE: 10, RING: 14, PINKY: 18 };
+    const FINGER_TIP_INDICES = { THUMB: 4, INDEX: 8, MIDDLE: 12, RING: 16, PINKY: 20 };
+    const FINGER_PIP_INDICES = { THUMB: 3, INDEX: 6, MIDDLE: 10, RING: 14, PINKY: 18 };
 
-        function countFingers(landmarks) {
-            let count = 0;
-            if (!landmarks) return 0;
-            
-            // Logika Jempol (tangan kanan di cermin)
-            if (landmarks[FINGER_TIP_INDICES.THUMB].x < landmarks[FINGER_PIP_INDICES.THUMB].x) {
-                count++;
-            }
-            // 4 Jari lainnya
-            if (landmarks[FINGER_TIP_INDICES.INDEX].y < landmarks[FINGER_PIP_INDICES.INDEX].y) {
-                count++;
-            }
-            if (landmarks[FINGER_TIP_INDICES.MIDDLE].y < landmarks[FINGER_PIP_INDICES.MIDDLE].y) {
-                count++;
-            }
-            if (landmarks[FINGER_TIP_INDICES.RING].y < landmarks[FINGER_PIP_INDICES.RING].y) {
-                count++;
-            }
-            if (landmarks[FINGER_TIP_INDICES.PINKY].y < landmarks[FINGER_PIP_INDICES.PINKY].y) {
-                count++;
-            }
-            return Math.min(count, 5);
-        }
-
-
-        // --- PERUBAHAN BESAR PADA FUNGSI onResults ---
-        function onResults(results) {
-            if (loadingMessage) {
-                loadingMessage.style.display = 'none'; // Sembunyikan pesan loading
-            }
-
-            // --- TAMBAHAN: Setup dan bersihkan canvas ---
-            // Set ukuran canvas sesuai dengan ukuran internal video
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
-
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-            // Variabel untuk menampung status kepal di frame ini
-            let currentFistState = false;    
-            
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                // --- TAMBAHAN: Menggambar landmarks (Marking) ---
-                // 
-                for (const landmarks of results.multiHandLandmarks) {
-                    // Menggambar garis penghubung antar sendi
-                    window.drawConnectors(canvasCtx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
-                    // Menggambar titik-titik sendi (landmarks)
-                    window.drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', radius: 4, lineWidth: 2});
-                }
-                
-                // Ambil landmarks tangan pertama
-                const landmarks = results.multiHandLandmarks[0];
-
-                // --- 1. Logika Deteksi Jari Mengepal (Kode Asli) ---
-                const detectedNumber = countFingers(landmarks);
-                if (detectedNumber === 0) {
-                    currentFistState = true;
-                }
-                
-                // --- 2. TAMBAHAN: Logika Tombol Tema ---
-                const indexTip = landmarks[FINGER_TIP_INDICES.INDEX]; // Ujung Jari Telunjuk (landmark #8)
-                if (indexTip) {
-                    // Dapatkan posisi tombol di layar
-                    const buttonRect = themeToggleButton.getBoundingClientRect();
-                    // Dapatkan posisi video di layar
-                    const videoRect = videoElement.getBoundingClientRect();
-                    
-                    // Konversi koordinat landmark (0.0 - 1.0) ke koordinat layar (pixel)
-                    // Penting: Video di-mirror (-scale-x-1), jadi koordinat x harus dibalik (1 - indexTip.x)
-                    const landmarkScreenX = videoRect.left + (1 - indexTip.x) * videoRect.width;
-                    const landmarkScreenY = videoRect.top + indexTip.y * videoRect.height;
-
-                    // Cek apakah landmark ada di dalam area tombol
-                    const isTouching = (
-                        landmarkScreenX > buttonRect.left &&
-                        landmarkScreenX < buttonRect.right &&
-                        landmarkScreenY > buttonRect.top &&
-                        landmarkScreenY < buttonRect.bottom
-                    );
-
-                    const now = Date.now();
-                    // Jika menyentuh DAN sudah melewati masa cooldown
-                    if (isTouching && (now - lastToggleTime > toggleCooldown)) {
-                        lastToggleTime = now; // Reset cooldown
-                        
-                        // Ganti status tema
-                        isWarmTheme = !isWarmTheme;
-                        bodyElement.classList.toggle('theme-warm', isWarmTheme);
-                        
-                        // Ganti ikon tombol
-                        themeIcon.innerText = isWarmTheme ? '🌙' : '☀️';
-                        console.log("Tema diubah ke:", isWarmTheme ? "Warm" : "Dark");
-                    }
-                }
-
-            } else {
-                // Tidak ada tangan terdeteksi
-                currentFistState = false;    
-            }
-
-            // --- Logika untuk memicu gambar dan suara (Kode Asli) ---
-            if (currentFistState && !isFistDetected) {
-                console.log("Status: Tangan Mengepal Terdeteksi!");
-                isFistDetected = true;
-                imageOverlay.classList.remove('hidden');
-                soundEffect.currentTime = 0;    
-                soundEffect.play();
-            } else if (!currentFistState && isFistDetected) {
-                console.log("Status: Tangan Dilepas.");
-                isFistDetected = false;
-                imageOverlay.classList.add('hidden');
-                soundEffect.pause();    
-            }
-
-            // --- TAMBAHAN: Restore canvas setelah selesai ---
-            canvasCtx.restore();
-        }
-
-        const hands = new window.Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`;
-            }
-        });
-
-        hands.setOptions({
-            maxNumHands: 1,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
-        });
-
-        hands.onResults(onResults);
-
-        const camera = new window.Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({ image: videoElement });
-            },
-            width: 1280,
-            height: 720
-        });
+    function countFingers(landmarks) {
+        let count = 0;
+        if (!landmarks) return 0;
         
-        camera.start();
+        if (landmarks[FINGER_TIP_INDICES.THUMB].x < landmarks[FINGER_PIP_INDICES.THUMB].x) { count++; }
+        if (landmarks[FINGER_TIP_INDICES.INDEX].y < landmarks[FINGER_PIP_INDICES.INDEX].y) { count++; }
+        if (landmarks[FINGER_TIP_INDICES.MIDDLE].y < landmarks[FINGER_PIP_INDICES.MIDDLE].y) { count++; }
+        if (landmarks[FINGER_TIP_INDICES.RING].y < landmarks[FINGER_PIP_INDICES.RING].y) { count++; }
+        if (landmarks[FINGER_TIP_INDICES.PINKY].y < landmarks[FINGER_PIP_INDICES.PINKY].y) { count++; }
+        return Math.min(count, 5);
+    }
 
-    </script>
+    // --- FUNGSI onResults YANG DIPERBARUI TOTAL ---
+    function onResults(results) {
+        if (loadingMessage) {
+            loadingMessage.style.display = 'none';
+        }
+
+        // Setup dan bersihkan canvas
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
+
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        let currentFistState = false;    
+        
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            // --- 1. Menggambar landmarks (Marking) ---
+            for (const landmarks of results.multiHandLandmarks) {
+                window.drawConnectors(canvasCtx, landmarks, window.HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+                window.drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', radius: 4, lineWidth: 2});
+            }
+            
+            const landmarks = results.multiHandLandmarks[0];
+
+            // --- 2. Logika Deteksi Jari Mengepal (Kode Asli) ---
+            const detectedNumber = countFingers(landmarks);
+            if (detectedNumber === 0) {
+                currentFistState = true;
+            }
+            
+            // --- 3. LOGIKA TOMBOL TEMA YANG DIPERBARUI (FIX) ---
+            const indexTip = landmarks[FINGER_TIP_INDICES.INDEX]; // Ujung Jari Telunjuk (#8)
+            
+            if (indexTip) {
+                const buttonRect = themeToggleButton.getBoundingClientRect();
+                const videoRect = videoElement.getBoundingClientRect();
+                
+                // --- INI LOGIKA BARU UNTUK object-cover ---
+                
+                // Rasio aspek video sumber (misal: 640/480 = 1.333)
+                const videoIntrinsicAR = videoElement.videoWidth / videoElement.videoHeight;
+                // Rasio aspek elemen HTML (misal: 1280/720 = 1.777)
+                const videoElementAR = videoRect.width / videoRect.height;
+                
+                let visibleVideoWidth = videoRect.width;
+                let visibleVideoHeight = videoRect.height;
+                let xOffset = videoRect.left;
+                let yOffset = videoRect.top;
+
+                if (videoIntrinsicAR > videoElementAR) {
+                    // Video lebih lebar dari elemen (misal: 16:9 di kotak 4:3)
+                    // `object-cover` akan memotong sisi kiri/kanan
+                    visibleVideoWidth = videoRect.height * videoIntrinsicAR;
+                    xOffset = videoRect.left - (visibleVideoWidth - videoRect.width) / 2;
+                } else if (videoIntrinsicAR < videoElementAR) {
+                    // Video lebih tinggi dari elemen (misal: 4:3 di kotak 16:9) <- KASUS UMUM
+                    // `object-cover` akan memotong sisi atas/bawah
+                    visibleVideoHeight = videoRect.width / videoIntrinsicAR;
+                    yOffset = videoRect.top - (visibleVideoHeight - videoRect.height) / 2;
+                }
+                // Jika rasio sama, xOffset/yOffset/width/height tetap sesuai videoRect.
+                
+                // Konversi koordinat landmark (0.0 - 1.0) ke koordinat layar (pixel)
+                // Kita gunakan offset dan skala yang baru dihitung
+                const landmarkScreenX = xOffset + (1 - indexTip.x) * visibleVideoWidth;
+                const landmarkScreenY = yOffset + indexTip.y * visibleVideoHeight;
+
+                // --- AKHIR DARI LOGIKA BARU ---
+
+                // Cek apakah landmark ada di dalam area tombol
+                const isTouching = (
+                    landmarkScreenX > buttonRect.left &&
+                    landmarkScreenX < buttonRect.right &&
+                    landmarkScreenY > buttonRect.top &&
+                    landmarkScreenY < buttonRect.bottom
+                );
+
+                const now = Date.now();
+                if (isTouching && (now - lastToggleTime > toggleCooldown)) {
+                    lastToggleTime = now; 
+                    
+                    isWarmTheme = !isWarmTheme;
+                    bodyElement.classList.toggle('theme-warm', isWarmTheme);
+                    
+                    themeIcon.innerText = isWarmTheme ? '🌙' : '☀️';
+                    console.log("Tema diubah ke:", isWarmTheme ? "Warm" : "Dark");
+                }
+            }
+
+        } else {
+            currentFistState = false;    
+        }
+
+        // --- Logika untuk memicu gambar dan suara (Kode Asli) ---
+        if (currentFistState && !isFistDetected) {
+            console.log("Status: Tangan Mengepal Terdeteksi!");
+            isFistDetected = true;
+            imageOverlay.classList.remove('hidden');
+            soundEffect.currentTime = 0;    
+            soundEffect.play();
+        } else if (!currentFistState && isFistDetected) {
+            console.log("Status: Tangan Dilepas.");
+            isFistDetected = false;
+            imageOverlay.classList.add('hidden');
+            soundEffect.pause();    
+        }
+
+        canvasCtx.restore();
+    }
+
+    const hands = new window.Hands({
+        locateFile: (file) => {
+            return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`;
+        }
+    });
+
+    hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.7,
+        minTrackingConfidence: 0.7
+    });
+
+    hands.onResults(onResults);
+
+    const camera = new window.Camera(videoElement, {
+        onFrame: async () => {
+            await hands.send({ image: videoElement });
+        },
+        width: 1280,
+        height: 720
+    });
+    
+    camera.start();
+
+</script>
 </body>
 </html>
